@@ -17,7 +17,9 @@ check_only=false
 problems=0
 note() { printf '  %s\n' "$1"; }
 fail() { printf '  ✗ %s\n' "$1"; problems=$((problems + 1)); }
-tilde() { printf '%s' "${1/#$HOME/~}"; }
+# Prints with a trailing newline so it can be called directly; the newline is
+# stripped when used inside $(...).
+tilde() { printf '%s\n' "${1/#$HOME/~}"; }
 
 [[ -d "$LOCAL_DIR" ]] || { echo "no local-skills/ at $LOCAL_DIR"; exit 1; }
 
@@ -38,8 +40,18 @@ for path in "${skills[@]}"; do
 
   # Frontmatter name must match the directory name, or the tools register a
   # second skill under a different name and the two collide.
-  declared="$(sed -n '/^---$/,/^---$/p' "$path/SKILL.md" |
-    sed -n 's/^name:[[:space:]]*//p' | head -1 | tr -d '"'"'"' ')"
+  # One awk process, no pipeline: under `set -o pipefail` a `| head -1` can
+  # SIGPIPE its upstream, fail the assignment, and abort the script silently.
+  # \042 and \047 are double and single quote.
+  declared="$(awk '
+    /^---[[:space:]]*$/ { fm++; if (fm == 2) exit; next }
+    fm == 1 && /^name:/ {
+      sub(/^name:[[:space:]]*/, "")
+      gsub(/^[\042\047]|[\042\047]$/, "")
+      gsub(/[[:space:]]+$/, "")
+      print; exit
+    }
+  ' "$path/SKILL.md")"
   if [[ -z "$declared" ]]; then
     fail "$name: SKILL.md has no 'name:' in frontmatter"
   elif [[ "$declared" != "$name" ]]; then
@@ -85,7 +97,7 @@ for tool in "${TOOL_DIRS[@]}"; do
     note "skipping $(tilde "$tool") (not installed)"
     continue
   fi
-  echo "$(tilde "$tool")"
+  tilde "$tool"
   for path in "${skills[@]}"; do
     name="$(basename "$path")"
     link="$tool/$name"
