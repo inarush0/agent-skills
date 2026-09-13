@@ -1,0 +1,5 @@
+interface:
+  display_name: "Git workflow"
+  short_description: "Branch, commit, push, and open a PR"
+policy:
+  allow_implicit_invocation: true
